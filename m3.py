@@ -161,25 +161,25 @@ while True:
                 m3SA = slash.join(SA_L) # mqtt                
                 client.publish("m3/m3Qin", m3SA, 1)
         #*********** Load 2. Open. 
-        if bR32 == "0" and GPIO.input(R32) and not GPIO.input(R34):
-            bR32 = "1" 
-            R32_T1 = time.time() + iws_dT 
-        if bR32=="1" and not GPIO.input(R32) and not GPIO.input(R34):
-            bR32 = "0"
-            R32_T2 = time.time() + iws_dT
-            R32_dT = R32_T2 - R32_T1
-            if R32_dT > 0.99: #---filter
-                if OP_L[3] == "0":
-                    Q = 1
-                else:
-                    Q = Q+1 
-                sQ = str(Q) #---to publish
-                sdT =  '{:0.1f}'.format(R32_dT)
-                sT1 = '{:0.0f}'.format(R32_T1)
-                sT2 =  '{:0.0f}'.format(R32_T2)
-                SA_L = [sQ, sdT, "3", sT1, sT2]
-                m3SA = slash.join(SA_L) # mqtt                
-                client.publish("m3/m3Qin", m3SA, 1)
+        #if bR32 == "0" and GPIO.input(R32) and not GPIO.input(R34):
+        #    bR32 = "1" 
+        #    R32_T1 = time.time() + iws_dT 
+        #if bR32=="1" and not GPIO.input(R32) and not GPIO.input(R34):
+        #    bR32 = "0"
+        #    R32_T2 = time.time() + iws_dT
+        #    R32_dT = R32_T2 - R32_T1
+        #    if R32_dT > 0.99: #---filter
+        #        if OP_L[3] == "0":
+        #            Q = 1
+        #        else:
+        #            Q = Q+1 
+        #        sQ = str(Q) #---to publish
+        #        sdT =  '{:0.1f}'.format(R32_dT)
+        #        sT1 = '{:0.0f}'.format(R32_T1)
+         #       sT2 =  '{:0.0f}'.format(R32_T2)
+        #        SA_L = [sQ, sdT, "3", sT1, sT2]
+         #       m3SA = slash.join(SA_L) # mqtt                
+         #       client.publish("m3/m3Qin", m3SA, 1)
                                          
     except (KeyboardInterrupt, SystemExit):
         client.disconnect() # From broker
