@@ -1,79 +1,67 @@
 #!/usr/bin/python3
-# m3_02.py Fri 18/May/2018. 
+# m3_05.py sUN 27/May/2018. 
 #  
 import paho.mqtt.client as mqtt  
 import time
 import RPi.GPIO as GPIO
 import sys
 import datetime
+import math
 # ---- MQTT
-broker_address="192.168.100.7" 
+broker_address="192.168.100.8" 
 topic = ["m3", ""]
 # ---- Pin Definitions
 R12 = 17 # Load 1
 R14 = 16 # Disch 1
 R22 = 13 # Load 2
 R24 = 12 # Disch 2
-R12 = 18 # Load 1
-R14 = 19 # Disch 1
-R22 = 20 # Load 2
-R24 = 21 # Disch 2
+R32 = 18 # Load 3
+R34 = 19 # Disch 3
+R42 = 20 # Load 4
+R44 = 21 # Disch 4
 # ---- Load 1
 bR12 = "0"  
-R12_T1 = 0.0 # +IWS_dT
-R12_sT1 = "00:00:00"
-R12_T2 = 0.0 # +IWS_dT
-R12_sT2 = "00:00:00"
-R12_dT = 0.0 
+R12_T1 = 0.0 
+R12_T2 = 0.0 
+R12_dT = 0.0
 # ---- Disch 1
 bR14 = "0"  
 # ---- Load 2
 bR22 = "0" 
-R22_T1 = 0.0 # +IWS_dT
-R22_sT1 = "00:00:00"
-R22_T2 = 0.0 # +IWS_dT
-R22_sT2 = "00:00:00"
+R22_T1 = 0.0 
+R22_T2 = 0.0 
 R22_dT = 0.0 
 # ---- Disch 2
 bR24 = "0"
 # ---- Load 3
 bR32 = "0" 
-R32_T1 = 0.0 # +IWS_dT
-R32_sT1 = "00:00:00"
-R32_T2 = 0.0 # +IWS_dT
-R32_sT2 = "00:00:00"
+R32_T1 = 0.0 
+R32_T2 = 0.0 
 R32_dT = 0.0 
 # ---- Disch 3
 bR34 = "0"
 # ---- Load 4
 bR42 = "0" 
-R42_T1 = 0.0 # +IWS_dT
-R42_sT1 = "00:00:00"
-R42_T2 = 0.0 # +IWS_dT
-R42_sT2 = "00:00:00"
+R42_T1 = 0.0 
+R42_T2 = 0.0 
 R42_dT = 0.0 
 # ---- Disch 4
 bR44 = "0"
-# --- m3SA-SA[0..4]-
-# --- 0.Q-1.dT-2.mm-3.T1-4.T2
-SA_sQ = "0"         # [0]
-SA_sdT = "0.000"    # [1]
-SA_mm = "0"         # [2]
-SA_sT1 = "00:00:00" # [3]
-SA_sT2 = "00:00:00" # [4]
-SA_L = [SA_sQ, SA_sdT, SA_mm, SA_sT1, SA_sT2]
+# --- m3SA-SA_L[0..4]-
+# --- Q/dT/mm/T1/T2
+sQ = "0"         # [0]
+sdT = "0.000"    # [1]
+sT1 = "123456" # [3]
+sT2 = "1527010948" # [4]
+SA_L = [sQ, sdT, "1", sT1, sT2]
 slash = "/"
 m3SA = slash.join(SA_L) # mqtt
 # ---- SA. Variables
-SA_Q = 0 # Sack Counter
-SA_T1 = 0.0 # +IWS_dT
-SA_T2 = 0.0 # +IWS_dT
-SA_dT = 0.0
-# --- s2sMMOP-OP[0..4] - 
-# --- 0.WOopen-1.fwd-2.bck-3.WOini
+Q = 0 # Sack Counter
+# --- s3OP-OP_L[0..4] - 
+# --- WOopen/Fwd/Bck/WOini
 OP_L = ["", "", "", "0"]
-s2sMMOP = slash.join(OP_L) # mqtt
-OP_iniprev = "0"
+WOIniPrev = "0"
 # ---- IWS Server Clock
 # ---- 1.Clk - 2.Date - 3.Hour 
 IWS_L = [0, "1/1/1970", "00:00:00"]
@@ -87,6 +75,10 @@ GPIO.setup(R12, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 GPIO.setup(R14, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 GPIO.setup(R22, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 GPIO.setup(R24, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(R32, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(R34, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(R42, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
+GPIO.setup(R44, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 # ---- MQTT Callbacks    
 def on_connect(client, userdata, flags, rc):
     m="Flags:"+str(flags)+" Code: "\
@@ -120,7 +112,7 @@ client.connect(broker_address, 1883, 60)
 time.sleep(1) 
 # ---- Suscription
 client.subscribe("m3/m3DT",1)
-client.subscribe("m3/m3SA",1)
+client.subscribe("m3/m3Qin",1)
 client.subscribe("m3/m3OP",1)
 # ---- Loop
 client.loop_start() 
@@ -128,65 +120,66 @@ time.sleep(1)
 # ---- Main Program
 while True:
     try:        
-        #---- Load 1. Open.        
-        # if GPIO.input(R12) and bR12==0 and not GPIO.input(R14): #Runtime
-        if True: # TEST
+        #*********** Load 1. Open.        
+        if bR12=="0" and GPIO.input(R12) and not GPIO.input(R14):
             bR12 = "1"  
-            R12_T1 = time.time() + iws_dT #---server time
-            R12_sT1 = time.strftime('%H:%M:%S', time.localtime(R12_T1))
-            time.sleep(3) # TEST          
-        #---- Load 1. Close.
-        # if bR12 == "1" and not GPIO.input(R12) and not GPIO.input(R14):
-        if True: # TEST
+            R12_T1 = time.time() + iws_dT 
+        if bR12 == "1" and not GPIO.input(R12) and not GPIO.input(R14):
             bR12 = "0"
-            R12_T2 = time.time() + iws_dT #---server time
-            R12_sT2 = time.strftime('%H:%M:%S', time.localtime(R12_T2))
+            R12_T2 = time.time() + iws_dT 
             R12_dT = R12_T2 - R12_T1
-            R12_sdT = '{:0.3f}'.format(R12_dT)
             if R12_dT > 0.99: #---filter 
-                if OP_L[3] != OP_iniprev:
-                    SA_Q = 1
-                    OP_iniprev = OP_L[3]
+                if OP_L[3] == "0":
+                    Q = 1
                 else:
-                    SA_Q = SA_Q+1 
-                SA_sQ = str(SA_Q) #---to publish
-                SA_sdT = R12_sdT 
-                SA_mm = "1"
-                SA_sT1 = R12_sT1
-                SA_sT2 = R12_sT2
-                SA_L = [SA_sQ, SA_sdT, SA_mm, SA_sT1, SA_sT2]
-                m3SA = slash.join(SA_L) # mqtt                
-                client.publish("m3/m3SA", m3SA, 1)
-        #---- Load 2. Open. 
-        # if bR22 == "0" and GPIO.input(R22) and not GPIO.input(R24):
-        if True: # TEST
+                    Q = Q+1 
+                sQ = str(Q) #---to publish
+                sdT = '{:0.1f}'.format(R12_dT)
+                sT1 = '{:0.0f}'.format(R12_T1)
+                sT2 =  '{:0.0f}'.format(R12_T2)
+                SA_L = [sQ, sdT, "1", sT1, sT2]
+                m3SA = slash.join(SA_L) # mqtt
+                client.publish("m3/m3Qin", m3SA, 1)
+        #*********** Load 2. Open. 
+        if bR22 == "0" and GPIO.input(R22) and not GPIO.input(R24):
             bR22 = "1" 
-            R22_T1 = time.time() + iws_dT #---server time
-            R22_sT1 = time.strftime('%H:%M:%S', time.localtime(R22_T1))
-            time.sleep(3) # TEST 
-        #---- Load 2. Close.
-        # if bR22=="1" and not GPIO.input(R22) and not GPIO.input(R24):
-        if True: # TEST
+            R22_T1 = time.time() + iws_dT 
+        if bR22=="1" and not GPIO.input(R22) and not GPIO.input(R24):
             bR22 = "0"              
-            R22_T2 = time.time() + iws_dT #---server time
-            R22_sT2 = time.strftime('%H:%M:%S', time.localtime(R22_T2))
+            R22_T2 = time.time() + iws_dT
             R22_dT = R22_T2 - R22_T1
-            R22_sdT = '{:0.3f}'.format(R22_dT)
             if R22_dT > 0.99: #---filter
-                if OP_L[3] != OP_iniprev:
-                    SA_Q = 1
-                    OP_iniprev = OP_L[3]
+                if OP_L[3] == "0":
+                    Q = 1
                 else:
-                    SA_Q = SA_Q+1 
-                SA_sQ = str(SA_Q) #---to publish
-                SA_sdT = R22_sdT
-                SA_mm = "2"
-                SA_sT1 = R22_sT1
-                SA_sT2 = R22_sT2
-                SA_L = [SA_sQ, SA_sdT, SA_mm, SA_sT1, SA_sT2]
+                    Q = Q+1 
+                sQ = str(Q) #---to publish
+                sdT =  '{:0.1f}'.format(R22_dT)
+                sT1 = '{:0.0f}'.format(R22_T1)
+                sT2 =  '{:0.0f}'.format(R22_T2)
+                SA_L = [sQ, sdT, "2", sT1, sT2]
                 m3SA = slash.join(SA_L) # mqtt                
-                client.publish("m3/m3SA", m3SA, 1)        
-        time.sleep(2) # TEST
+                client.publish("m3/m3Qin", m3SA, 1)
+        #*********** Load 2. Open. 
+        if bR32 == "0" and GPIO.input(R32) and not GPIO.input(R34):
+            bR32 = "1" 
+            R32_T1 = time.time() + iws_dT 
+        if bR32=="1" and not GPIO.input(R32) and not GPIO.input(R34):
+            bR32 = "0"
+            R32_T2 = time.time() + iws_dT
+            R32_dT = R32_T2 - R32_T1
+            if R32_dT > 0.99: #---filter
+                if OP_L[3] == "0":
+                    Q = 1
+                else:
+                    Q = Q+1 
+                sQ = str(Q) #---to publish
+                sdT =  '{:0.1f}'.format(R32_dT)
+                sT1 = '{:0.0f}'.format(R32_T1)
+                sT2 =  '{:0.0f}'.format(R32_T2)
+                SA_L = [sQ, sdT, "3", sT1, sT2]
+                m3SA = slash.join(SA_L) # mqtt                
+                client.publish("m3/m3Qin", m3SA, 1)
                                          
     except (KeyboardInterrupt, SystemExit):
         client.disconnect() # From broker
